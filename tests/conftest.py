@@ -1,5 +1,7 @@
+import allure
 import pytest
 import requests
+
 from courier_helper import generate_courier_data
 
 
@@ -20,6 +22,7 @@ def create_courier(base_url):
         return response
 
     return _create_courier
+
 
 @pytest.fixture
 def orders_url():
@@ -47,3 +50,33 @@ def create_test_order(orders_url):
         return response
 
     return _create_order
+
+
+@pytest.fixture(autouse=True)
+def cleanup_courier(courier_data):
+    yield
+    login_data = {
+        "login": courier_data["login"],
+        "password": courier_data["password"]
+    }
+    login_response = requests.post(
+        'https://qa-scooter.praktikum-services.ru/api/v1/courier/login',
+        json=login_data
+    )
+    if login_response.status_code == 200:
+        courier_id = login_response.json()["id"]
+        requests.delete(
+            f'https://qa-scooter.praktikum-services.ru/api/v1/courier/{courier_id}'
+        )
+
+
+@pytest.fixture
+def cleanup_order():
+    track_numbers = []
+    yield track_numbers
+    for track in track_numbers:
+        with allure.step(f"Удаление заказа с track номером {track}"):
+            requests.put(
+                f"https://qa-scooter.praktikum-services.ru/api/v1/orders/cancel",
+                json={"track": track}
+            )
