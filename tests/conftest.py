@@ -1,82 +1,84 @@
 import allure
 import pytest
-import requests
 
-from courier_helper import generate_courier_data
-
-
-@pytest.fixture
-def base_url():
-    return 'https://qa-scooter.praktikum-services.ru/api/v1/courier'
+from data.test_data import OrderData
+from helpers.api_helpers import CourierAPI, OrdersAPI
+from helpers.courier_helper import generate_courier_data
 
 
 @pytest.fixture
-def courier_data():
+def authorized_courier():
+    courier_data = generate_courier_data()
+    with allure.step("Создание тестового курьера"):
+        create_response = CourierAPI.create_courier(courier_data)
+        assert create_response.status_code == 201, "Не удалось создать курьера"
+    with allure.step("Авторизация курьера"):
+        login_data = {
+            "login": courier_data["login"],
+            "password": courier_data["password"]
+        }
+        login_response = CourierAPI.login_courier(login_data)
+        assert login_response.status_code == 200, "Не удалось авторизовать курьера"
+    courier_data["id"] = login_response.json()["id"]
+    yield courier_data
+    with allure.step("Удаление тестового курьера"):
+        CourierAPI.delete_courier(courier_data["id"])
+
+
+@pytest.fixture
+def created_order():
+    order_data = OrderData.BASE_ORDER
+    track_number = None
+    with allure.step("Создание тестового заказа"):
+        response = OrdersAPI.create_order(order_data)
+        assert response.status_code == 201, "Не удалось создать заказ"
+        track_number = response.json()["track"]
+    yield {"track": track_number, "data": order_data}
+    if track_number:
+        with allure.step(f"Удаление тестового заказа с track номером {track_number}"):
+            OrdersAPI.cancel_order(track_number)
+
+
+@pytest.fixture
+def new_courier_data():
     return generate_courier_data()
 
 
 @pytest.fixture
-def create_courier(base_url):
-    def _create_courier(data):
-        response = requests.post(base_url, json=data)
-        return response
-
-    return _create_courier
-
-
-@pytest.fixture
-def orders_url():
-    return 'https://qa-scooter.praktikum-services.ru/api/v1/orders'
-
-
-@pytest.fixture
 def test_order_data():
-    return {
-        "firstName": "Тестовый",
-        "lastName": "Заказчик",
-        "address": "Тестовая улица, 123",
-        "metroStation": 4,
-        "phone": "+7 999 888 77 66",
-        "rentTime": 5,
-        "deliveryDate": "2024-01-20",
-        "comment": "Тестовый заказ"
-    }
+    return OrderData.BASE_ORDER
 
 
 @pytest.fixture
-def create_test_order(orders_url):
-    def _create_order(order_data):
-        response = requests.post(orders_url, json=order_data)
-        return response
-
-    return _create_order
-
-
-@pytest.fixture(autouse=True)
-def cleanup_courier(courier_data):
-    yield
-    login_data = {
-        "login": courier_data["login"],
-        "password": courier_data["password"]
-    }
-    login_response = requests.post(
-        'https://qa-scooter.praktikum-services.ru/api/v1/courier/login',
-        json=login_data
-    )
-    if login_response.status_code == 200:
-        courier_id = login_response.json()["id"]
-        requests.delete(
-            f'https://qa-scooter.praktikum-services.ru/api/v1/courier/{courier_id}'
-        )
-
-
-@pytest.fixture
-def cleanup_order():
+def cleanup_orders():
     track_numbers = []
     yield track_numbers
     for track in track_numbers:
         with allure.step(f"Удаление заказа с track номером {track}"):
-            requests.put(
-                f"https://qa-scooter.praktikum-services.ru/api/v1/orders/cancel",
-                json={"track": track}
-            )
+            OrdersAPI.cancel_order(track)
+
+
+@pytest.fixture
+def save_track(cleanup_orders):
+    def _save_track(response):
+        track = response.json()["track"]
+        cleanup_orders.append(track)
+        return track
+
+    return _save_track
+
+
+@pytest.fixture
+def login_credentials():
+    def _get_credentials(courier_data):
+        return {
+            "login": courier_data["login"],
+            "password": courier_data["password"]
+        }
+
+    return _get_credentials
+
+@pytest.fixture
+def create_test_order(test_order_data):
+    response = OrdersAPI.create_order(test_order_data)
+    return response.json()["track"]

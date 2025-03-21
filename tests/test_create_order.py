@@ -1,74 +1,32 @@
 import allure
 import pytest
-import requests
+
+from helpers.api_helpers import OrdersAPI
 
 
+@allure.epic("Заказы")
+@allure.feature("Создание заказа")
 class TestCreateOrder:
 
-    @allure.title("Проверка создания заказа с разными цветами")
-    @pytest.mark.parametrize("color", [["BLACK"], ["GREY"], ["BLACK", "GREY"], []])
-    def test_create_order_with_colors(self, color, cleanup_order):
-        order_data = {
-            "firstName": "Тестовый",
-            "lastName": "Заказчик",
-            "address": "Тестовая улица, 123",
-            "metroStation": 4,
-            "phone": "+7 999 888 77 66",
-            "rentTime": 5,
-            "deliveryDate": "2024-01-20",
-            "comment": "Тестовый заказ",
-            "color": color
-        }
-
-        with allure.step("Отправка запроса на создание заказа"):
-            response = requests.post("https://qa-scooter.praktikum-services.ru/api/v1/orders",
-                                     json=order_data)
-
-        with allure.step("Проверка, что статус-код ответа равен 201"):
-            assert response.status_code == 201
-
-        with allure.step("Проверка, что в теле ответа содержится track"):
-            response_data = response.json()
-            assert "track" in response_data
-            assert isinstance(response_data["track"], int)
-            cleanup_order.append(response_data["track"])
-
-    @allure.title("Проверка наличия track в ответе при создании заказа")
-    @pytest.mark.parametrize("order_data", [
-        {
-            "firstName": "Тестовый",
-            "lastName": "Заказчик",
-            "address": "Тестовая улица, 123",
-            "metroStation": 4,
-            "phone": "+7 999 888 77 66",
-            "rentTime": 5,
-            "deliveryDate": "2024-01-20",
-            "comment": "Тестовый заказ",
-            "color": ["BLACK", "GREY"]
-        },
-        {
-            "firstName": "Тестовый",
-            "lastName": "Заказчик",
-            "address": "Тестовая улица, 123",
-            "metroStation": 4,
-            "phone": "+7 999 888 77 66",
-            "rentTime": 5,
-            "deliveryDate": "2024-01-20",
-            "comment": "Тестовый заказ"
-        }
+    @allure.title("Создание заказа")
+    @pytest.mark.parametrize("test_case", [
+        pytest.param({"color": ["BLACK"]}, id="black_color"),
+        pytest.param({"color": ["GREY"]}, id="grey_color"),
+        pytest.param({"color": ["BLACK", "GREY"]}, id="both_colors"),
+        pytest.param({"color": []}, id="no_color"),
+        pytest.param({}, id="without_color_field")
     ])
-    def test_order_response_contains_track(self, order_data, cleanup_order):
-        with allure.step("Отправка запроса на создание заказа"):
-            response = requests.post("https://qa-scooter.praktikum-services.ru/api/v1/orders",
-                                     json=order_data)
+    def test_create_order(self, test_case, cleanup_orders, test_order_data, save_track):
+        order_data = test_order_data.copy()
+        order_data.update(test_case)
 
-        with allure.step("Проверка, что статус-код ответа равен 201"):
-            assert response.status_code == 201
+        with allure.step(f"Создание заказа с параметрами {test_case}"):
+            response = OrdersAPI.create_order(order_data)
 
-        with allure.step("Проверка, что в теле ответа содержится track и он больше 0"):
+        with allure.step("Проверка ответа"):
+            assert response.status_code == 201, f"Неожиданный код ответа: {response.status_code}"
             response_data = response.json()
-            assert "track" in response_data
-            assert isinstance(response_data["track"], int)
-            assert response_data["track"] > 0
-            cleanup_order.append(response_data["track"])
-
+            assert "track" in response_data, "В ответе отсутствует поле track"
+            track = save_track(response)
+            assert isinstance(track, int), f"Track не является целым числом: {track}"
+            assert track > 0, f"Track должен быть положительным числом, получено: {track}"

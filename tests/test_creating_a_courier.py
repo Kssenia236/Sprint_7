@@ -1,97 +1,100 @@
 import allure
-import requests
-import random
-import string
-from courier_helper import generate_courier_data
+import pytest
 
-def register_new_courier_and_return_login_password():
-    def generate_random_string(length):
-        letters = string.ascii_lowercase
-        return ''.join(random.choice(letters) for _ in range(length))
-
-    login_pass = []
-    login = generate_random_string(10)
-    password = generate_random_string(10)
-    first_name = generate_random_string(10)
-
-    payload = {
-        "login": login,
-        "password": password,
-        "firstName": first_name
-    }
-
-    response = requests.post('https://qa-scooter.praktikum-services.ru/api/v1/courier', data=payload)
-
-    if response.status_code == 201:
-        login_pass.append(login)
-        login_pass.append(password)
-        login_pass.append(first_name)
-
-    return login_pass
+from data.response_messages import CourierMessages
+from helpers.api_helpers import CourierAPI
 
 
+@allure.epic("Курьеры")
+@allure.feature("Создание курьера")
 class TestCreateCourier:
-    @allure.step("Тест на создание курьера")
-    def test_create_courier(self, create_courier, courier_data):
-        with allure.step("Создаем курьера"):
-            response = create_courier(courier_data)
-        assert response.status_code == 201
 
-    @allure.step("Тест на невозможность создания дублирующего курьера")
-    def test_cannot_create_duplicate_courier(self, create_courier, courier_data):
-        with allure.step("Создаем первого курьера"):
-            response = create_courier(courier_data)
-            assert response.status_code == 201
-
-        with allure.step("Пытаемся создать дубликат курьера"):
-            response = create_courier(courier_data)
-            assert response.status_code == 409
-
-    @allure.step("Тест на создание курьера без обязательных полей")
-    def test_create_courier_without_required_fields(self, create_courier, courier_data):
-        with allure.step("Создаем данные без пароля"):
-            data = courier_data.copy()
-            del data['password']
-
-        with allure.step("Пытаемся создать курьера без пароля"):
-            response = create_courier(data)
-            assert response.status_code == 400
-
-    @allure.step("Тест на корректный ответ при создании курьера")
-    def test_create_courier_returns_correct_response(self, create_courier, courier_data):
-        with allure.step("Создаем курьера"):
-            response = create_courier(courier_data)
-            assert response.status_code == 201
-            assert response.json() == {"ok": True}
-
-    @allure.step("Тест на ошибки при отсутствии обязательных полей")
-    def test_create_courier_missing_required_fields_returns_error(self, create_courier, courier_data):
-        with allure.step("Проверяем создание без логина"):
-            data_without_login = courier_data.copy()
-            del data_without_login['login']
-            response = create_courier(data_without_login)
-            assert response.status_code == 400
-            assert response.json()["message"] == "Недостаточно данных для создания учетной записи"
-
-        with allure.step("Проверяем создание без пароля"):
-            data_without_password = courier_data.copy()
-            del data_without_password['password']
-            response = create_courier(data_without_password)
-            assert response.status_code == 400
-            assert response.json()["message"] == "Недостаточно данных для создания учетной записи"
-
-    @allure.step("Тест на создание курьера с уже существующим логином")
-    def test_create_courier_with_existing_login(self, create_courier, courier_data):
-        with allure.step("Создаем первого курьера"):
-            response = create_courier(courier_data)
-            assert response.status_code == 201
-            assert response.json()['ok'] == True
-
-        with allure.step("Создаем данные для дублирующего курьера"):
-            duplicate_courier_data = generate_courier_data()
-            duplicate_courier_data['login'] = courier_data['login']
-
-        with allure.step("Пытаемся создать курьера с существующим логином"):
-            response = create_courier(duplicate_courier_data)
-            assert response.status_code == 409
-            assert response.json()['message'] == "Этот логин уже используется. Попробуйте другой."
+    @allure.title("Проверка создания курьера")
+    @pytest.mark.parametrize("test_case", [
+        pytest.param(
+            {
+                "case": "valid",
+                "data_mod": lambda x: x,
+                "expected_status": 201,
+                "expected_response": {"ok": True},
+                "description": "валидные данные"
+            },
+            id="create_valid_courier"
+        ),
+        pytest.param(
+            {
+                "case": "duplicate",
+                "data_mod": lambda x: x,
+                "expected_status": 409,
+                "expected_response": {
+                    "code": 409,
+                    "message": CourierMessages.DUPLICATE_LOGIN
+                },
+                "description": "дубликат курьера"
+            },
+            id="create_duplicate_courier"
+        ),
+        pytest.param(
+            {
+                "case": "no_login",
+                "data_mod": lambda x: {k: v for k, v in x.items() if k != "login"},
+                "expected_status": 400,
+                "expected_response": {
+                    "code": 400,
+                    "message": CourierMessages.MISSING_REQUIRED_FIELDS
+                },
+                "description": "без логина"
+            },
+            id="missing_login"
+        ),
+        pytest.param(
+            {
+                "case": "no_password",
+                "data_mod": lambda x: {k: v for k, v in x.items() if k != "password"},
+                "expected_status": 400,
+                "expected_response": {
+                    "code": 400,
+                    "message": CourierMessages.MISSING_REQUIRED_FIELDS
+                },
+                "description": "без пароля"
+            },
+            id="missing_password"
+        ),
+        pytest.param(
+            {
+                "case": "no_firstname",
+                "data_mod": lambda x: {k: v for k, v in x.items() if k != "firstName"},
+                "expected_status": 201,
+                "expected_response": {"ok": True},
+                "description": "без имени (необязательное поле)"
+            },
+            id="missing_firstname"
+        ),
+        pytest.param(
+            {
+                "case": "existing_login",
+                "data_mod": lambda x: {"login": x["login"], "password": "new_pass", "firstName": "new_name"},
+                "expected_status": 409,
+                "expected_response": {
+                    "code": 409,
+                    "message": CourierMessages.DUPLICATE_LOGIN
+                },
+                "description": "существующий логин"
+            },
+            id="existing_login"
+        )
+    ])
+    def test_create_courier(self, test_case, new_courier_data):
+        with allure.step(f"Подготовка данных для теста: {test_case['description']}"):
+            courier_data = new_courier_data
+            if test_case["case"] in ["duplicate", "existing_login"]:
+                first_response = CourierAPI.create_courier(courier_data)
+                assert first_response.status_code == 201, "Не удалось создать первого курьера"
+            test_data = test_case["data_mod"](courier_data)
+        with allure.step(f"Создание курьера: {test_case['description']}"):
+            response = CourierAPI.create_courier(test_data)
+        with allure.step("Проверка ответа"):
+            assert response.status_code == test_case[
+                "expected_status"], f"Неожиданный код ответа: {response.status_code}"
+            response_data = response.json()
+            assert response_data == test_case["expected_response"], f"Неожиданное тело ответа: {response_data}"
