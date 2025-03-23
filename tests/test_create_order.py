@@ -1,8 +1,8 @@
 import allure
 import pytest
 
+from data.test_data import OrderData
 from helpers.api_helpers import OrdersAPI
-
 
 @allure.epic("Заказы")
 @allure.feature("Создание заказа")
@@ -16,8 +16,8 @@ class TestCreateOrder:
         pytest.param({"color": []}, id="no_color"),
         pytest.param({}, id="without_color_field")
     ])
-    def test_create_order(self, test_case, cleanup_orders, test_order_data, save_track):
-        order_data = test_order_data.copy()
+    def test_create_order(self, test_case, cleanup_orders, save_track):
+        order_data = OrderData.BASE_ORDER
         order_data.update(test_case)
 
         with allure.step(f"Создание заказа с параметрами {test_case}"):

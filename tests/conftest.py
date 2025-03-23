@@ -26,27 +26,8 @@ def authorized_courier():
 
 
 @pytest.fixture
-def created_order():
-    order_data = OrderData.BASE_ORDER
-    track_number = None
-    with allure.step("Создание тестового заказа"):
-        response = OrdersAPI.create_order(order_data)
-        assert response.status_code == 201, "Не удалось создать заказ"
-        track_number = response.json()["track"]
-    yield {"track": track_number, "data": order_data}
-    if track_number:
-        with allure.step(f"Удаление тестового заказа с track номером {track_number}"):
-            OrdersAPI.cancel_order(track_number)
-
-
-@pytest.fixture
 def new_courier_data():
     return generate_courier_data()
-
-
-@pytest.fixture
-def test_order_data():
-    return OrderData.BASE_ORDER
 
 
 @pytest.fixture
@@ -79,6 +60,6 @@ def login_credentials():
     return _get_credentials
 
 @pytest.fixture
-def create_test_order(test_order_data):
-    response = OrdersAPI.create_order(test_order_data)
+def create_test_order():
+    response = OrdersAPI.create_order(OrderData.BASE_ORDER)
     return response.json()["track"]

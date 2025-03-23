@@ -5,13 +5,13 @@ from helpers.api_helpers import OrdersAPI
 @allure.epic("Orders API")
 class TestOrderList:
     @allure.title("Проверка получения списка заказов")
-    def test_get_orders_returns_orders_list(self, test_order_data, create_test_order, save_track):
+    def test_get_orders_returns_orders_list(self, create_test_order, save_track):
         response = OrdersAPI.get_orders()
         assert response.status_code == 200
         assert isinstance(response.json()["orders"], list)
 
     @allure.title("Проверка структуры заказа в списке")
-    def test_order_contains_required_fields(self, test_order_data, create_test_order, save_track):
+    def test_order_contains_required_fields(self, create_test_order, save_track):
         response = OrdersAPI.get_orders()
         orders = response.json()["orders"]
         required_fields = ["id", "firstName", "lastName", "address", "metroStation",
